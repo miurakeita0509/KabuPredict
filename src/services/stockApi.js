@@ -64,7 +64,10 @@ export async function fetchStockCandles(stockCode) {
     throw new Error('株価データが取得できませんでした。');
   }
 
-  return data;
+  const companyName =
+    result.meta?.shortName || result.meta?.longName || symbol;
+
+  return { data, companyName };
 }
 
 function formatDate(unixTimestamp) {
