@@ -30,7 +30,7 @@ export default function ControlPanel({
       step: 0.0001,
     },
     { key: 'batchSize', label: 'バッチサイズ', min: 16, max: 64, step: 8 },
-    { key: 'predictionDays', label: '予測日数', min: 1, max: 5, step: 1 },
+    { key: 'predictionDays', label: '予測日数', min: 1, max: 20, step: 1 },
   ];
 
   return (

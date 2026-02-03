@@ -35,6 +35,7 @@ function getNextBusinessDate(dateStr, daysAhead) {
 
 export default function App() {
   const [stockCode, setStockCode] = useState('');
+  const [companyName, setCompanyName] = useState('');
   const [historicalData, setHistoricalData] = useState(null);
   const [predictions, setPredictions] = useState(null);
   const [params, setParams] = useState(DEFAULT_PARAMS);
@@ -49,13 +50,14 @@ export default function App() {
     setPredictions(null);
     setTrainingStatus(null);
     try {
-      const data = await fetchStockCandles(stockCode);
+      const { data, companyName: name } = await fetchStockCandles(stockCode);
       if (data.length < 60) {
         throw new Error(
           'データが不足しています。学習には最低60日分のデータが必要です。'
         );
       }
       setHistoricalData(data);
+      setCompanyName(name);
     } catch (err) {
       setError(err.message);
       setHistoricalData(null);
@@ -130,6 +132,7 @@ export default function App() {
             <StockChart
               historicalData={historicalData}
               predictions={predictions}
+              companyName={companyName}
             />
             <TrainingStatus status={trainingStatus} />
             <PredictionTable predictions={predictions} />

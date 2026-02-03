@@ -9,7 +9,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 
-export default function StockChart({ historicalData, predictions }) {
+export default function StockChart({ historicalData, predictions, companyName }) {
   if (!historicalData || historicalData.length === 0) {
     return (
       <div className="bg-white border border-gray-200 rounded-lg p-8 flex items-center justify-center text-gray-400 min-h-[300px]">
@@ -44,6 +44,11 @@ export default function StockChart({ historicalData, predictions }) {
 
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-4">
+      {companyName && (
+        <h3 className="text-sm font-semibold text-gray-700 mb-2">
+          {companyName}
+        </h3>
+      )}
       <ResponsiveContainer width="100%" height={400}>
         <LineChart data={chartData}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
