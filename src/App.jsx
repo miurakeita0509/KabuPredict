@@ -6,6 +6,7 @@ import ControlPanel from './components/ControlPanel';
 import StockChart from './components/StockChart';
 import TrainingStatus from './components/TrainingStatus';
 import PredictionTable from './components/PredictionTable';
+import { fetchStockCandles } from './services/finnhubApi';
 
 const DEFAULT_PARAMS = {
   windowSize: 30,
@@ -27,7 +28,24 @@ export default function App() {
   const [error, setError] = useState('');
 
   const handleFetchData = async () => {
-    // Will be implemented in Commit 3
+    setError('');
+    setIsLoadingData(true);
+    setPredictions(null);
+    setTrainingStatus(null);
+    try {
+      const data = await fetchStockCandles(apiKey, stockCode);
+      if (data.length < 60) {
+        throw new Error(
+          'データが不足しています。学習には最低60日分のデータが必要です。'
+        );
+      }
+      setHistoricalData(data);
+    } catch (err) {
+      setError(err.message);
+      setHistoricalData(null);
+    } finally {
+      setIsLoadingData(false);
+    }
   };
 
   const handleStartTraining = async () => {
