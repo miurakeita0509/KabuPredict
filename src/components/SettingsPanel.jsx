@@ -4,6 +4,8 @@ export default function SettingsPanel({
   onFetchData,
   isLoading,
   error,
+  onAddToWatchlist,
+  canAddToWatchlist,
 }) {
   return (
     <div className="space-y-4">
@@ -31,6 +33,15 @@ export default function SettingsPanel({
           東証上場銘柄の証券コードを入力してください
         </p>
       </div>
+
+      {canAddToWatchlist && (
+        <button
+          onClick={onAddToWatchlist}
+          className="w-full text-sm text-blue-600 border border-blue-300 rounded-md px-3 py-1.5 hover:bg-blue-50 transition-colors"
+        >
+          + 監視銘柄に追加
+        </button>
+      )}
 
       {error && (
         <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
