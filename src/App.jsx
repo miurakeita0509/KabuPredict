@@ -6,7 +6,7 @@ import ControlPanel from './components/ControlPanel';
 import StockChart from './components/StockChart';
 import TrainingStatus from './components/TrainingStatus';
 import PredictionTable from './components/PredictionTable';
-import { fetchStockCandles } from './services/finnhubApi';
+import { fetchStockCandles } from './services/stockApi';
 import { trainAndPredict } from './services/lstmModel';
 
 const DEFAULT_PARAMS = {
@@ -34,7 +34,6 @@ function getNextBusinessDate(dateStr, daysAhead) {
 }
 
 export default function App() {
-  const [apiKey, setApiKey] = useState('');
   const [stockCode, setStockCode] = useState('');
   const [historicalData, setHistoricalData] = useState(null);
   const [predictions, setPredictions] = useState(null);
@@ -50,7 +49,7 @@ export default function App() {
     setPredictions(null);
     setTrainingStatus(null);
     try {
-      const data = await fetchStockCandles(apiKey, stockCode);
+      const data = await fetchStockCandles(stockCode);
       if (data.length < 60) {
         throw new Error(
           'データが不足しています。学習には最低60日分のデータが必要です。'
@@ -104,8 +103,6 @@ export default function App() {
                 データ設定
               </h2>
               <SettingsPanel
-                apiKey={apiKey}
-                onApiKeyChange={setApiKey}
                 stockCode={stockCode}
                 onStockCodeChange={setStockCode}
                 onFetchData={handleFetchData}

@@ -1,8 +1,4 @@
-import { useState } from 'react';
-
 export default function SettingsPanel({
-  apiKey,
-  onApiKeyChange,
   stockCode,
   onStockCodeChange,
   onFetchData,
@@ -11,30 +7,6 @@ export default function SettingsPanel({
 }) {
   return (
     <div className="space-y-4">
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Finnhub API キー
-        </label>
-        <input
-          type="password"
-          value={apiKey}
-          onChange={(e) => onApiKeyChange(e.target.value)}
-          placeholder="APIキーを入力"
-          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        <p className="text-xs text-gray-400 mt-1">
-          <a
-            href="https://finnhub.io"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline"
-          >
-            finnhub.io
-          </a>
-          {' '}で無料取得できます
-        </p>
-      </div>
-
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
           証券コード
@@ -49,12 +21,15 @@ export default function SettingsPanel({
           />
           <button
             onClick={onFetchData}
-            disabled={isLoading || !apiKey || !stockCode}
+            disabled={isLoading || !stockCode}
             className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
           >
             {isLoading ? '取得中...' : 'データ取得'}
           </button>
         </div>
+        <p className="text-xs text-gray-400 mt-1">
+          東証上場銘柄の証券コードを入力してください
+        </p>
       </div>
 
       {error && (
