@@ -1,6 +1,12 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import Header from './components/Header';
 import Footer from './components/Footer';
+import Watchlist, {
+  getWatchlist,
+  addToWatchlist,
+  removeFromWatchlist,
+  isInWatchlist,
+} from './components/Watchlist';
 import SettingsPanel from './components/SettingsPanel';
 import ControlPanel from './components/ControlPanel';
 import StockChart from './components/StockChart';
@@ -18,7 +24,6 @@ const DEFAULT_PARAMS = {
 };
 
 function getNextBusinessDate(dateStr, daysAhead) {
-  // dateStr: "YYYY/MM/DD"
   const parts = dateStr.split('/');
   const d = new Date(+parts[0], +parts[1] - 1, +parts[2]);
   let count = 0;
@@ -43,14 +48,15 @@ export default function App() {
   const [isTraining, setIsTraining] = useState(false);
   const [trainingStatus, setTrainingStatus] = useState(null);
   const [error, setError] = useState('');
+  const [watchlist, setWatchlist] = useState(getWatchlist);
 
-  const handleFetchData = async () => {
+  const fetchData = useCallback(async (code) => {
     setError('');
     setIsLoadingData(true);
     setPredictions(null);
     setTrainingStatus(null);
     try {
-      const { data, companyName: name } = await fetchStockCandles(stockCode);
+      const { data, companyName: name } = await fetchStockCandles(code);
       if (data.length < 60) {
         throw new Error(
           'データが不足しています。学習には最低60日分のデータが必要です。'
@@ -58,12 +64,35 @@ export default function App() {
       }
       setHistoricalData(data);
       setCompanyName(name);
+      setStockCode(code);
     } catch (err) {
       setError(err.message);
       setHistoricalData(null);
     } finally {
       setIsLoadingData(false);
     }
+  }, []);
+
+  const handleFetchData = () => fetchData(stockCode);
+
+  const handleSelectFromWatchlist = (code) => {
+    setStockCode(code);
+    fetchData(code);
+  };
+
+  const handleAddToWatchlist = () => {
+    const code = stockCode.includes('.') ? stockCode : `${stockCode}`;
+    const updated = addToWatchlist(code, companyName);
+    if (updated === null) {
+      setError('監視銘柄は最大20件までです。不要な銘柄を削除してください。');
+    } else {
+      setWatchlist(updated);
+    }
+  };
+
+  const handleRemoveFromWatchlist = (code) => {
+    const updated = removeFromWatchlist(code);
+    setWatchlist(updated);
   };
 
   const handleStartTraining = async () => {
@@ -78,7 +107,6 @@ export default function App() {
         (status) => setTrainingStatus(status)
       );
 
-      // 予測日付を生成（最終データ日から営業日を想定して+1日ずつ）
       const lastDate = historicalData[historicalData.length - 1].date;
       const predWithDates = preds.map((price, i) => ({
         date: getNextBusinessDate(lastDate, i + 1),
@@ -92,6 +120,10 @@ export default function App() {
     }
   };
 
+  const hasData = historicalData != null && historicalData.length > 0;
+  const canAddToWatchlist =
+    hasData && stockCode && !isInWatchlist(stockCode);
+
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
       <Header />
@@ -102,6 +134,17 @@ export default function App() {
           <div className="lg:w-80 lg:flex-shrink-0 space-y-6">
             <div className="bg-white border border-gray-200 rounded-lg p-4">
               <h2 className="text-sm font-semibold text-gray-700 mb-3">
+                監視銘柄
+              </h2>
+              <Watchlist
+                items={watchlist}
+                onSelect={handleSelectFromWatchlist}
+                onRemove={handleRemoveFromWatchlist}
+              />
+            </div>
+
+            <div className="bg-white border border-gray-200 rounded-lg p-4">
+              <h2 className="text-sm font-semibold text-gray-700 mb-3">
                 データ設定
               </h2>
               <SettingsPanel
@@ -110,6 +153,8 @@ export default function App() {
                 onFetchData={handleFetchData}
                 isLoading={isLoadingData}
                 error={error}
+                onAddToWatchlist={handleAddToWatchlist}
+                canAddToWatchlist={canAddToWatchlist}
               />
             </div>
 
@@ -122,7 +167,7 @@ export default function App() {
                 onParamsChange={setParams}
                 onStartTraining={handleStartTraining}
                 isTraining={isTraining}
-                hasData={historicalData != null && historicalData.length > 0}
+                hasData={hasData}
               />
             </div>
           </div>
