@@ -1,9 +1,13 @@
 const YAHOO_BASE = 'https://query1.finance.yahoo.com/v8/finance/chart';
-const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
+const CORS_PROXIES = [
+  (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+];
 
 /**
  * Yahoo Finance API 経由で株価データを取得する
- * CORS制限があるため公開プロキシを経由する
+ * CORS制限があるため公開プロキシを経由する（複数プロキシにフォールバック）
  */
 export async function fetchStockCandles(stockCode) {
   const symbol = stockCode.includes('.')
@@ -11,12 +15,23 @@ export async function fetchStockCandles(stockCode) {
     : `${stockCode}.T`;
 
   const yahooUrl = `${YAHOO_BASE}/${encodeURIComponent(symbol)}?range=1y&interval=1d`;
-  const url = `${CORS_PROXY}${encodeURIComponent(yahooUrl)}`;
 
   let res;
-  try {
-    res = await fetch(url);
-  } catch {
+  let lastError;
+  for (const makeUrl of CORS_PROXIES) {
+    const url = makeUrl(yahooUrl);
+    try {
+      res = await fetch(url);
+      if (res.ok) break;
+      lastError = new Error(`HTTP ${res.status}`);
+      res = null;
+    } catch (err) {
+      lastError = err;
+      res = null;
+    }
+  }
+
+  if (!res) {
     throw new Error(
       'ネットワークエラーが発生しました。接続を確認してください。'
     );
