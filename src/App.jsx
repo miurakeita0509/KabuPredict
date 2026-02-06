@@ -16,7 +16,7 @@ import { fetchStockCandles } from './services/stockApi';
 import { trainAndPredict } from './services/lstmModel';
 
 const DEFAULT_PARAMS = {
-  windowSize: 30,
+  windowSize: 60,
   epochs: 50,
   learningRate: 0.001,
   batchSize: 32,
