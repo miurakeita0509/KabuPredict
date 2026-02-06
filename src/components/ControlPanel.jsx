@@ -17,20 +17,43 @@ export default function ControlPanel({
     {
       key: 'windowSize',
       label: 'ウィンドウサイズ',
+      description: '予測に使う過去の日数',
       min: 10,
       max: 60,
       step: 5,
     },
-    { key: 'epochs', label: 'エポック数', min: 10, max: 200, step: 10 },
+    {
+      key: 'epochs',
+      label: 'エポック数',
+      description: '学習の繰り返し回数（多いほど精度向上）',
+      min: 10,
+      max: 200,
+      step: 10,
+    },
     {
       key: 'learningRate',
       label: '学習率',
+      description: '学習の速度（小さいほど慎重に学習）',
       min: 0.0001,
       max: 0.01,
       step: 0.0001,
     },
-    { key: 'batchSize', label: 'バッチサイズ', min: 16, max: 64, step: 8 },
-    { key: 'predictionDays', label: '予測日数', min: 1, max: 20, step: 1 },
+    {
+      key: 'batchSize',
+      label: 'バッチサイズ',
+      description: '一度に処理するデータ数',
+      min: 16,
+      max: 64,
+      step: 8,
+    },
+    {
+      key: 'predictionDays',
+      label: '予測日数',
+      description: '何日先まで予測するか',
+      min: 1,
+      max: 20,
+      step: 1,
+    },
   ];
 
   return (
@@ -43,15 +66,16 @@ export default function ControlPanel({
         <span className="text-gray-400">{isOpen ? '▲' : '▼'}</span>
       </button>
 
-      <div className={`space-y-3 ${isOpen ? '' : 'hidden lg:block'}`}>
-        {controls.map(({ key, label, min, max, step }) => (
+      <div className={`space-y-4 ${isOpen ? '' : 'hidden lg:block'}`}>
+        {controls.map(({ key, label, description, min, max, step }) => (
           <div key={key}>
-            <div className="flex justify-between text-sm mb-1">
+            <div className="flex justify-between text-sm mb-0.5">
               <label className="font-medium text-gray-700">{label}</label>
               <span className="text-gray-500">
                 {key === 'learningRate' ? params[key].toFixed(4) : params[key]}
               </span>
             </div>
+            <p className="text-xs text-gray-400 mb-1">{description}</p>
             <input
               type="range"
               min={min}
