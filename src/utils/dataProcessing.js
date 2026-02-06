@@ -13,17 +13,24 @@ export function normalize(data) {
 }
 
 /**
- * 複数特徴量（OHLCV）の正規化
+ * 複数特徴量（OHLCV + テクニカル指標）の正規化
  * 各特徴量を独立してMin-Max正規化する
- * @param {Array} data - [{open, high, low, close, volume}, ...]
- * @returns {{normalized: Array, scalers: Object}} - 正規化データとスケーラー情報
+ * @param {Array} data - [{open, high, low, close, volume, sma5, sma20, rsi, macd, ...}, ...]
+ * @returns {{normalized: Array, scalers: Object, features: string[]}} - 正規化データとスケーラー情報
  */
 export function normalizeMultiFeature(data) {
-  const features = ['open', 'high', 'low', 'close', 'volume'];
+  // 基本特徴量 + テクニカル指標
+  const features = [
+    'open', 'high', 'low', 'close', 'volume',
+    'sma5', 'sma20', 'rsi', 'macd', 'macdSignal', 'macdHist', 'bbUpper', 'bbLower'
+  ];
+
+  // データに存在する特徴量のみ使用
+  const availableFeatures = features.filter((f) => data[0] && data[0][f] !== undefined);
   const scalers = {};
 
   // 各特徴量のmin/maxを計算
-  for (const feat of features) {
+  for (const feat of availableFeatures) {
     const values = data.map((d) => d[feat]);
     const min = Math.min(...values);
     const max = Math.max(...values);
@@ -33,14 +40,14 @@ export function normalizeMultiFeature(data) {
   // 正規化
   const normalized = data.map((d) => {
     const row = {};
-    for (const feat of features) {
+    for (const feat of availableFeatures) {
       const { min, range } = scalers[feat];
       row[feat] = (d[feat] - min) / range;
     }
     return row;
   });
 
-  return { normalized, scalers };
+  return { normalized, scalers, features: availableFeatures };
 }
 
 /**
@@ -81,15 +88,18 @@ export function createWindows(data, windowSize) {
 
 /**
  * 複数特徴量でスライディングウィンドウを作成（直接マルチステップ出力用）
- * @param {Array} normalizedData - 正規化された[{open, high, low, close, volume}, ...]
+ * @param {Array} normalizedData - 正規化された[{open, high, low, close, volume, ...}, ...]
  * @param {number} windowSize - 入力ウィンドウサイズ
  * @param {number} predictionDays - 予測日数（出力サイズ）
- * @returns {{xs: Array, ys: Array}} - 入力(OHLCV配列)と出力(終値配列)
+ * @param {string[]} features - 使用する特徴量リスト
+ * @returns {{xs: Array, ys: Array}} - 入力(特徴量配列)と出力(終値配列)
  */
-export function createMultiFeatureWindows(normalizedData, windowSize, predictionDays) {
+export function createMultiFeatureWindows(normalizedData, windowSize, predictionDays, features) {
   const xs = [];
   const ys = [];
-  const features = ['open', 'high', 'low', 'close', 'volume'];
+
+  // featuresが渡されない場合はデフォルト
+  const featureList = features || ['open', 'high', 'low', 'close', 'volume'];
 
   // 十分なデータがあるか確認
   const maxIndex = normalizedData.length - windowSize - predictionDays;
@@ -98,7 +108,7 @@ export function createMultiFeatureWindows(normalizedData, windowSize, prediction
     // 入力: windowSize日分の全特徴量
     const window = [];
     for (let j = i; j < i + windowSize; j++) {
-      const dayFeatures = features.map((f) => normalizedData[j][f]);
+      const dayFeatures = featureList.map((f) => normalizedData[j][f]);
       window.push(dayFeatures);
     }
     xs.push(window);

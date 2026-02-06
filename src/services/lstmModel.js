@@ -6,24 +6,24 @@ import {
   trainTestSplit,
   calculateMultiStepRMSE,
 } from '../utils/dataProcessing';
-
-const NUM_FEATURES = 5; // open, high, low, close, volume
+import { addTechnicalIndicators } from '../utils/technicalIndicators';
 
 /**
  * LSTMモデルを構築する（複数特徴量入力・直接マルチステップ出力）
  * @param {number} windowSize - 入力ウィンドウサイズ
+ * @param {number} numFeatures - 入力特徴量の数
  * @param {number} predictionDays - 予測日数（出力ユニット数）
  * @param {number} learningRate - 学習率
  */
-function buildModel(windowSize, predictionDays, learningRate) {
+function buildModel(windowSize, numFeatures, predictionDays, learningRate) {
   const model = tf.sequential();
 
-  // 第1 LSTMレイヤー（ユニット数増加: 50→128）
+  // 第1 LSTMレイヤー
   model.add(
     tf.layers.lstm({
       units: 128,
       returnSequences: true,
-      inputShape: [windowSize, NUM_FEATURES],
+      inputShape: [windowSize, numFeatures],
     })
   );
   model.add(tf.layers.dropout({ rate: 0.2 }));
@@ -57,30 +57,32 @@ export async function trainAndPredict(
   { windowSize, epochs, learningRate, batchSize, predictionDays },
   onProgress
 ) {
-  // 1. 複数特徴量の正規化
-  const { normalized, scalers } = normalizeMultiFeature(ohlcvData);
+  // 1. テクニカル指標を追加
+  const dataWithIndicators = addTechnicalIndicators(ohlcvData);
 
-  // 2. ウィンドウ作成（直接マルチステップ出力用）
-  const { xs, ys } = createMultiFeatureWindows(normalized, windowSize, predictionDays);
+  // 2. 複数特徴量の正規化
+  const { normalized, scalers, features } = normalizeMultiFeature(dataWithIndicators);
+  const numFeatures = features.length;
+
+  // 3. ウィンドウ作成（直接マルチステップ出力用）
+  const { xs, ys } = createMultiFeatureWindows(normalized, windowSize, predictionDays, features);
   if (xs.length === 0) {
     throw new Error('データが不足しています。ウィンドウサイズまたは予測日数を小さくしてください。');
   }
 
-  // 3. 訓練/テスト分割
+  // 4. 訓練/テスト分割
   const { trainX, trainY, testX, testY } = trainTestSplit(xs, ys);
   if (trainX.length === 0 || testX.length === 0) {
     throw new Error('データが不足しています。');
   }
 
-  // 4. テンソル化
-  // trainX shape: [samples, windowSize, 5]
+  // 5. テンソル化
   const trainXTensor = tf.tensor3d(trainX);
-  // trainY shape: [samples, predictionDays]
   const trainYTensor = tf.tensor2d(trainY);
   const testXTensor = tf.tensor3d(testX);
 
-  // 5. モデル構築
-  const model = buildModel(windowSize, predictionDays, learningRate);
+  // 6. モデル構築
+  const model = buildModel(windowSize, numFeatures, predictionDays, learningRate);
 
   onProgress({
     currentEpoch: 0,
@@ -136,7 +138,7 @@ export async function trainAndPredict(
 
   // 最新のwindowSize日分のデータを入力
   const lastWindow = normalized.slice(-windowSize);
-  const lastWindowFeatures = lastWindow.map((d) => [d.open, d.high, d.low, d.close, d.volume]);
+  const lastWindowFeatures = lastWindow.map((d) => features.map((f) => d[f]));
 
   const inputTensor = tf.tensor3d([lastWindowFeatures]);
   const predNorm = model.predict(inputTensor);
