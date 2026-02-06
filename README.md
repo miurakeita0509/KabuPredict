@@ -10,8 +10,9 @@ https://miurakeita0509.github.io/KabuPredict/
 
 - **ブラウザ完結** - サーバー不要。TensorFlow.js によりブラウザ内で学習・予測を実行
 - **日本株対応** - 東証上場銘柄の証券コードを入力するだけでデータ取得
+- **テクニカル指標** - RSI、MACD、移動平均線、ボリンジャーバンドを自動計算し学習に使用
+- **デュアルチャート** - 過去1年間の推移と直近1ヶ月+予測を2つのチャートで表示
 - **リアルタイム学習状況表示** - エポックごとの損失値をプログレスバーで表示
-- **チャート表示** - 実績値と予測値を折れ線グラフで比較
 - **監視銘柄リスト** - 最大20銘柄をローカルストレージに保存、ワンクリックで切り替え
 - **ハイパーパラメータ調整** - ウィンドウサイズ、エポック数、学習率、バッチサイズ、予測日数をUI上で変更可能
 - **レスポンシブ対応** - デスクトップ・モバイルの両方で利用可能
@@ -25,16 +26,22 @@ https://miurakeita0509.github.io/KabuPredict/
 | スタイリング | Tailwind CSS 3 |
 | 機械学習 | TensorFlow.js |
 | チャート | Recharts |
-| データ取得 | Yahoo Finance API（allorigins.win 経由） |
+| データ取得 | Yahoo Finance API（CORSプロキシ経由・3ヶ月チャンク分割） |
 | デプロイ | GitHub Pages + GitHub Actions |
 
 ## モデル構成
 
-- **アーキテクチャ**: 2層 LSTM（各50ユニット）+ Dropout（0.2）+ Dense（1）
-- **正規化**: Min-Max 正規化
+- **アーキテクチャ**: 2層 LSTM（128 + 64ユニット）+ Dropout（0.2）+ Dense（32, ReLU）+ Dense（出力）
+- **入力特徴量（13次元）**:
+  - OHLCV（始値、高値、安値、終値、出来高）
+  - SMA 5日・20日（短期・中期移動平均線）
+  - RSI 14日（相対力指数）
+  - MACD（MACDライン、シグナルライン、ヒストグラム）
+  - ボリンジャーバンド（上限・下限）
+- **正規化**: 特徴量ごとの独立した Min-Max 正規化
 - **オプティマイザ**: Adam
 - **損失関数**: Mean Squared Error
-- **予測方式**: 再帰的マルチステップ予測（最大20営業日）
+- **予測方式**: 直接マルチステップ予測（最大20営業日）
 
 ## セットアップ
 
@@ -72,15 +79,16 @@ src/
 │   ├── Footer.jsx             # フッター
 │   ├── SettingsPanel.jsx      # 証券コード入力・データ取得
 │   ├── ControlPanel.jsx       # ハイパーパラメータ設定
-│   ├── StockChart.jsx         # 株価チャート
+│   ├── StockChart.jsx         # 株価チャート（デュアル表示）
 │   ├── TrainingStatus.jsx     # 学習進捗表示
 │   ├── PredictionTable.jsx    # 予測結果テーブル
 │   └── Watchlist.jsx          # 監視銘柄リスト
 ├── services/
-│   ├── stockApi.js            # Yahoo Finance APIクライアント
+│   ├── stockApi.js            # Yahoo Finance APIクライアント（チャンク分割）
 │   └── lstmModel.js           # LSTMモデルの構築・学習・予測
 └── utils/
-    └── dataProcessing.js      # データ正規化・ウィンドウ生成
+    ├── dataProcessing.js      # データ正規化・ウィンドウ生成
+    └── technicalIndicators.js # テクニカル指標の計算
 ```
 
 ## 注意事項
