@@ -100,9 +100,9 @@ export default function App() {
     setPredictions(null);
     setError('');
     try {
-      const closePrices = historicalData.map((d) => d.close);
+      // OHLCVデータをそのまま渡す（複数特徴量対応）
       const { predictions: preds, rmse } = await trainAndPredict(
-        closePrices,
+        historicalData,
         params,
         (status) => setTrainingStatus(status)
       );

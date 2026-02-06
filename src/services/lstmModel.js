@@ -1,31 +1,42 @@
 import * as tf from '@tensorflow/tfjs';
 import {
-  normalize,
-  denormalize,
-  createWindows,
+  normalizeMultiFeature,
+  denormalizePredictions,
+  createMultiFeatureWindows,
   trainTestSplit,
-  calculateRMSE,
+  calculateMultiStepRMSE,
 } from '../utils/dataProcessing';
 
+const NUM_FEATURES = 5; // open, high, low, close, volume
+
 /**
- * LSTMモデルを構築する
+ * LSTMモデルを構築する（複数特徴量入力・直接マルチステップ出力）
+ * @param {number} windowSize - 入力ウィンドウサイズ
+ * @param {number} predictionDays - 予測日数（出力ユニット数）
+ * @param {number} learningRate - 学習率
  */
-function buildModel(windowSize, learningRate) {
+function buildModel(windowSize, predictionDays, learningRate) {
   const model = tf.sequential();
 
+  // 第1 LSTMレイヤー（ユニット数増加: 50→128）
   model.add(
     tf.layers.lstm({
-      units: 50,
+      units: 128,
       returnSequences: true,
-      inputShape: [windowSize, 1],
+      inputShape: [windowSize, NUM_FEATURES],
     })
   );
   model.add(tf.layers.dropout({ rate: 0.2 }));
 
-  model.add(tf.layers.lstm({ units: 50, returnSequences: false }));
+  // 第2 LSTMレイヤー
+  model.add(tf.layers.lstm({ units: 64, returnSequences: false }));
   model.add(tf.layers.dropout({ rate: 0.2 }));
 
-  model.add(tf.layers.dense({ units: 1 }));
+  // 全結合層
+  model.add(tf.layers.dense({ units: 32, activation: 'relu' }));
+
+  // 出力層: predictionDays分の終値を一度に出力
+  model.add(tf.layers.dense({ units: predictionDays }));
 
   model.compile({
     optimizer: tf.train.adam(learningRate),
@@ -37,20 +48,22 @@ function buildModel(windowSize, learningRate) {
 
 /**
  * 学習・評価・予測をまとめて実行する
- * onProgress: ({ currentEpoch, totalEpochs, loss, rmse, phase }) => void
+ * @param {Array} ohlcvData - [{date, open, high, low, close, volume}, ...]
+ * @param {Object} params - {windowSize, epochs, learningRate, batchSize, predictionDays}
+ * @param {Function} onProgress - 進捗コールバック
  */
 export async function trainAndPredict(
-  closePrices,
+  ohlcvData,
   { windowSize, epochs, learningRate, batchSize, predictionDays },
   onProgress
 ) {
-  // 1. 正規化
-  const { normalized, min, max } = normalize(closePrices);
+  // 1. 複数特徴量の正規化
+  const { normalized, scalers } = normalizeMultiFeature(ohlcvData);
 
-  // 2. ウィンドウ作成
-  const { xs, ys } = createWindows(normalized, windowSize);
+  // 2. ウィンドウ作成（直接マルチステップ出力用）
+  const { xs, ys } = createMultiFeatureWindows(normalized, windowSize, predictionDays);
   if (xs.length === 0) {
-    throw new Error('データが不足しています。ウィンドウサイズを小さくしてください。');
+    throw new Error('データが不足しています。ウィンドウサイズまたは予測日数を小さくしてください。');
   }
 
   // 3. 訓練/テスト分割
@@ -59,17 +72,15 @@ export async function trainAndPredict(
     throw new Error('データが不足しています。');
   }
 
-  // 4. テンソル化 (shape: [samples, windowSize, 1])
-  const trainXTensor = tf.tensor3d(
-    trainX.map((w) => w.map((v) => [v]))
-  );
-  const trainYTensor = tf.tensor2d(trainY.map((v) => [v]));
-  const testXTensor = tf.tensor3d(
-    testX.map((w) => w.map((v) => [v]))
-  );
+  // 4. テンソル化
+  // trainX shape: [samples, windowSize, 5]
+  const trainXTensor = tf.tensor3d(trainX);
+  // trainY shape: [samples, predictionDays]
+  const trainYTensor = tf.tensor2d(trainY);
+  const testXTensor = tf.tensor3d(testX);
 
   // 5. モデル構築
-  const model = buildModel(windowSize, learningRate);
+  const model = buildModel(windowSize, predictionDays, learningRate);
 
   onProgress({
     currentEpoch: 0,
@@ -107,12 +118,14 @@ export async function trainAndPredict(
   });
 
   const testPredNorm = model.predict(testXTensor);
-  const testPredArray = Array.from(testPredNorm.dataSync());
-  const testPredDenorm = testPredArray.map((v) => denormalize(v, min, max));
-  const testActualDenorm = testY.map((v) => denormalize(v, min, max));
-  const rmse = calculateRMSE(testActualDenorm, testPredDenorm);
+  const testPredArray = testPredNorm.arraySync(); // [samples, predictionDays]
 
-  // 8. 逐次予測（1〜predictionDays営業日先）
+  // 逆正規化してRMSE計算
+  const testPredDenorm = testPredArray.map((pred) => denormalizePredictions(pred, scalers));
+  const testActualDenorm = testY.map((actual) => denormalizePredictions(actual, scalers));
+  const rmse = calculateMultiStepRMSE(testActualDenorm, testPredDenorm);
+
+  // 8. 将来予測（直接マルチステップ出力）
   onProgress({
     currentEpoch: epochs,
     totalEpochs: epochs,
@@ -121,28 +134,24 @@ export async function trainAndPredict(
     phase: '将来予測を計算中...',
   });
 
+  // 最新のwindowSize日分のデータを入力
   const lastWindow = normalized.slice(-windowSize);
-  const futurePredictions = [];
+  const lastWindowFeatures = lastWindow.map((d) => [d.open, d.high, d.low, d.close, d.volume]);
 
-  let currentWindow = [...lastWindow];
-  for (let i = 0; i < predictionDays; i++) {
-    const inputTensor = tf.tensor3d([currentWindow.map((v) => [v])]);
-    const predNorm = model.predict(inputTensor);
-    const predValue = predNorm.dataSync()[0];
-    futurePredictions.push(denormalize(predValue, min, max));
+  const inputTensor = tf.tensor3d([lastWindowFeatures]);
+  const predNorm = model.predict(inputTensor);
+  const predArray = predNorm.dataSync(); // [predictionDays]
 
-    // ウィンドウを1つスライド: 先頭を削除し、予測値を末尾に追加
-    currentWindow = [...currentWindow.slice(1), predValue];
-
-    inputTensor.dispose();
-    predNorm.dispose();
-  }
+  // 逆正規化
+  const futurePredictions = denormalizePredictions(Array.from(predArray), scalers);
 
   // クリーンアップ
   trainXTensor.dispose();
   trainYTensor.dispose();
   testXTensor.dispose();
   testPredNorm.dispose();
+  inputTensor.dispose();
+  predNorm.dispose();
   model.dispose();
 
   onProgress({

@@ -10,6 +10,11 @@ const CORS_PROXIES = [
  * CORS制限があるため公開プロキシを経由する（複数プロキシにフォールバック）
  */
 export async function fetchStockCandles(stockCode) {
+  // 空の証券コードをチェック
+  if (!stockCode || stockCode.trim() === '') {
+    throw new Error('証券コードを入力してください。');
+  }
+
   const symbol = stockCode.includes('.')
     ? stockCode
     : `${stockCode}.T`;
@@ -32,8 +37,9 @@ export async function fetchStockCandles(stockCode) {
   }
 
   if (!res) {
+    console.error('Network error:', lastError);
     throw new Error(
-      'ネットワークエラーが発生しました。接続を確認してください。'
+      'ネットワークエラーが発生しました。インターネット接続を確認してください。'
     );
   }
 
@@ -41,11 +47,31 @@ export async function fetchStockCandles(stockCode) {
     if (res.status === 404) {
       throw new Error('銘柄が見つかりません。証券コードを確認してください。');
     }
-    throw new Error(`データ取得に失敗しました (HTTP ${res.status})`);
+    if (res.status === 400) {
+      throw new Error('無効な証券コードです。正しい形式で入力してください。');
+    }
+    console.error(`HTTP Error: ${res.status}`);
+    throw new Error('データ取得に失敗しました。しばらく時間をおいて再度お試しください。');
   }
 
-  const json = await res.json();
+  let json;
+  try {
+    json = await res.json();
+  } catch (parseError) {
+    console.error('JSON parse error:', parseError);
+    throw new Error('データの解析に失敗しました。しばらく時間をおいて再度お試しください。');
+  }
+
   const result = json?.chart?.result?.[0];
+  const error = json?.chart?.error;
+
+  if (error) {
+    console.error('Yahoo Finance API error:', error);
+    if (error.code === 'Not Found') {
+      throw new Error('銘柄が見つかりません。証券コードを確認してください。');
+    }
+    throw new Error('データ取得に失敗しました。証券コードを確認してください。');
+  }
 
   if (!result) {
     throw new Error(
@@ -57,7 +83,7 @@ export async function fetchStockCandles(stockCode) {
   const quote = result.indicators?.quote?.[0];
 
   if (!timestamps || !quote || !quote.close) {
-    throw new Error('株価データが取得できませんでした。');
+    throw new Error('この銘柄の株価データが取得できませんでした。');
   }
 
   // null値を除外しつつデータを構築
@@ -76,7 +102,7 @@ export async function fetchStockCandles(stockCode) {
   }
 
   if (data.length === 0) {
-    throw new Error('株価データが取得できませんでした。');
+    throw new Error('この銘柄の株価データが取得できませんでした。');
   }
 
   const companyName =
